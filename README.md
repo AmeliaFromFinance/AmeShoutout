@@ -50,10 +50,10 @@ That’s all you need to do in OBS.
 
 ## Common variables to use for the messages
 
-- %user% - The username of the person that typed the command (all lowercase, e.g. ameliafromfinance)
-  - %userName% - Same as above but with exact capitalization (e.g. AmeliaFromFinance)
-- %targetUser% - The username of the person that is getting shouted out (all lowercase, e.g. ameliafromfinance)
-  - %targetUserName% - Same as above but with exact capitalization (e.g. AmeliaFromFinance)
+- %userName% - The username of the person that typed the command (all lowercase, e.g. ameliafromfinance)
+  - %user% - Same as above but with exact capitalization (e.g. AmeliaFromFinance)
+- %targetUserName% - The username of the person that is getting shouted out (all lowercase, e.g. ameliafromfinance)
+  - %targetUser% - Same as above but with exact capitalization (e.g. AmeliaFromFinance)
 - %game% - The game that they last streamed.
 - %targetChannelTitle% - The title of their last stream.
 - For URL type manually `https://twitch.tv/%targetUser%`
