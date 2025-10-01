@@ -53,7 +53,7 @@ That’s all you need to do in OBS.
 ## Streamer.bot Setup
 1. Copy everything from `ImportString.txt`.
 2. In **Streamer.bot**, click **Import** at the top → paste → click **Import**.
-3. Go to **Commands** → find **Ame - Shoutout** → expand → right-click **Shoutout** → check **Enabled**.
+3. Go to **Commands** → find **Ame - Shoutout** → expand → right-click each command (**Auto Shoutout**, **Set Custom Message**, and **Shoutout**) → check **Enabled**.
 4. Go to **Actions & Queues** → **Actions** → find **Ame - Shoutout** → expand → click **Shoutout**.
 5. Update these global variables under **Sub-Actions** → **Variables** (click the arrow to open folder):
    - `ShoutoutSceneName` → name of the OBS scene with your media source.
