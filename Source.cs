@@ -19,7 +19,7 @@ public class CPHInline
     private static readonly object SoLock = new();
 
     private const string FallbackTemplate =
-        "Go show @{STREAMER} some love, {SUBJECT_WASWERE:lower} last streaming {GAME|something awesome}!";
+        "Go show @{STREAMER} some love, {LIVE_STATUS:lower} {GAME:title|something awesome}!";
 
     // Matches: {TOKEN[:modifier][|default]}
     // Groups: 1=token, 2=modifier?, 3=default?
@@ -44,30 +44,57 @@ public class CPHInline
         CPH.TryGetArg("input1", out string showClip);
 
         if (sourceType == "TwitchFirstWord")
+            {
+                if (!CPH.GetTwitchUserVar<bool>(user, "autoShoutout"))
+                    return true;
+            }
+
+        bool isLive = false;
+        try
         {
-            if (!CPH.GetTwitchUserVar<bool>(user, "autoShoutout"))
-                return true;
+            if (!string.IsNullOrWhiteSpace(targetUser))
+                isLive = IsChannelLiveAsync(targetUser.ToLowerInvariant(), hash, clientId).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            CPH.LogWarn($"SO - Live check failed: {ex.Message}");
         }
 
         var tokens = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["USER"]       = () => user,
-            ["STREAMER"]   = () => targetUser,
-            ["GAME"]       = () => game,
-            ["TITLE"]      = () => targetChannelTitle,
-            ["URL"]        = () =>
+            ["USER"] = () => user,
+            ["STREAMER"] = () => targetUser,
+            ["GAME"] = () => game,
+            ["TITLE"] = () => targetChannelTitle,
+            ["URL"] = () =>
             {
                 if (string.IsNullOrWhiteSpace(user)) return "";
                 var u = user.Replace(" ", "");
                 return string.Concat("https://twitch.tv/", u.ToLowerInvariant());
             },
             ["PRONOUN_SUBJECT"] = () => string.IsNullOrWhiteSpace(pronoun) ? "they" : pronoun,
-            ["PRONOUN_OBJECT"]  = () => string.IsNullOrWhiteSpace(pronounObject) ? "them" : pronounObject,
+            ["PRONOUN_OBJECT"] = () => string.IsNullOrWhiteSpace(pronounObject) ? "them" : pronounObject,
             ["SUBJECT_WASWERE"] = () =>
             {
                 var subj = string.IsNullOrWhiteSpace(pronoun) ? "they" : pronoun.Trim();
-                var be   = subj.Equals("they", StringComparison.OrdinalIgnoreCase) ? "were" : "was";
+                var be = subj.Equals("they", StringComparison.OrdinalIgnoreCase) ? "were" : "was";
                 return string.Concat(subj, " ", be);
+            },
+            ["SUBJECT_ISARE"] = () =>
+            {
+                var subj = string.IsNullOrWhiteSpace(pronoun) ? "they" : pronoun.Trim();
+                var be = subj.Equals("they", StringComparison.OrdinalIgnoreCase) ? "are" : "is";
+                return string.Concat(subj, " ", be);
+            },
+            ["LIVE_STATUS"] = () =>
+            {
+                var subj = string.IsNullOrWhiteSpace(pronoun) ? "they" : pronoun.Trim();
+                bool they = subj.Equals("they", StringComparison.OrdinalIgnoreCase);
+
+                if (isLive)
+                    return string.Concat(subj, " ", they ? "are" : "is", " currently streaming");
+
+                return string.Concat(subj, " ", they ? "were" : "was", " last streaming");
             }
         };
 
@@ -265,10 +292,37 @@ public class CPHInline
         CPH.LogInfo($"SO - Chosen quality: {pick.h}p @ ~{pick.fps:0.##}fps (preferredMax={preferredMax})");
         return (pick.url, sig, token);
     }
+    
+    private static async Task<bool> IsChannelLiveAsync(string username, string hash, string clientId)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(hash) || string.IsNullOrWhiteSpace(clientId))
+            return false;
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "https://gql.twitch.tv/gql");
+        req.Headers.TryAddWithoutValidation("Client-ID", clientId);
+
+        var payloadObj = new
+        {
+            operationName = "UseLive",
+            variables     = new { channelLogin = username },
+            extensions    = new { persistedQuery = new { version = 1, sha256Hash = "639d5f11bfb8bf3053b424d9ef650d04c4ebb7d94711d644afb08fe9a0fad5d9" } }
+        };
+
+        var payload = JsonConvert.SerializeObject(payloadObj);
+        req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+        using var resp = await Http.SendAsync(req).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            return false;
+
+        var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var json = JObject.Parse(body);
+        return json["data"]?["user"]?["stream"]?.Type is not null and not JTokenType.Null;
+    }
 
     private void PlayClip(string scene, string source, string sourceUrl, string signature, string token, float duration)
     {
-        var url   = string.Concat(sourceUrl, "?token=", Uri.EscapeDataString(token), "&sig=", signature);
+        var url = string.Concat(sourceUrl, "?token=", Uri.EscapeDataString(token), "&sig=", signature);
         var delay = Math.Max(0, (int)(Math.Min(duration, MaxClipDuration) * 1000));
 
         CPH.LogInfo($"SO - Final URL: {url}");

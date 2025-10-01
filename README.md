@@ -71,6 +71,11 @@ That’s all you need to do in OBS.
 - `{PRONOUN_SUBJECT}` - The subject pronoun that they have set on `https://pr.alejo.io/` (She/He/Fae/etc...)
 - `{PRONOUN_OBJECT}` - The object pronoun that they have set on `https://pr.alejo.io/` (Her/Him/Faer/etc...)
 - `{SUBJECT_WASWERE}` - The subject pronoun + was/were, for example, if their subject pronoun is 'they' then it will say 'they were', and if it's 'she' then it will say 'she was'
+- `{SUBJECT_ISARE}` - The subject pronoun + was/were, for example, if their subject pronoun is 'they' then it will say 'they are', and if it's 'she' then it will say 'she is'
+- `{LIVE_STATUS}` - Will say 'they are currently streaming' if the person is live and their subject pronoun is they (also default), or 'she/he/fae is currently streaming' if the subject pronoun isn't they.
+  - If the person isn't live then it will say 'they were last streaming' or 'she/he/fae was last streaming'
+  - Example:
+    - If the template was 'Go show @{STREAMER} some love, {LIVE_STATUS:lower} {GAME:title|something awesome}!' and I was shouted out while I was streaming then it would say **"Go show @AmeliaFromFinance some love, she is currently streaming Software And Game Development!"**, or **"Go show @AmeliaFromFinance some love, she was last streaming Software And Game Development!"** if I wasn't streaming.
 
 ---
 
