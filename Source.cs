@@ -6,6 +6,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 public class CPHInline
 {
@@ -13,63 +15,186 @@ public class CPHInline
     private static readonly Random Rng = new();
     private const float MaxClipDuration = 30.0f;
     private const float DurationEpsilon = 0.05f;
+    private static readonly TextInfo TextInfo = CultureInfo.CurrentCulture.TextInfo;
+    private static readonly object SoLock = new();
+
+    private const string FallbackTemplate =
+        "Go show @{STREAMER} some love, {SUBJECT_WASWERE:lower} last streaming {GAME|something awesome}!";
+
+    // Matches: {TOKEN[:modifier][|default]}
+    // Groups: 1=token, 2=modifier?, 3=default?
+    private static readonly Regex TokenRe = new(
+        @"\{([A-Za-z0-9_]+)(?::([A-Za-z0-9_]+))?(?:\|([^}]*))?\}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public bool Execute()
     {
+        string hash     = CPH.GetGlobalVar<string>("ShoutoutHash");
+        string clientId = CPH.GetGlobalVar<string>("ShoutoutClientId");
+        string scene    = CPH.GetGlobalVar<string>("ShoutoutSceneName");
+        string source   = CPH.GetGlobalVar<string>("ShoutoutSourceName");
+
+        CPH.TryGetArg("user", out string user);
+        CPH.TryGetArg("targetUser", out string targetUser);
+        CPH.TryGetArg("game", out string game);
+        CPH.TryGetArg("targetChannelTitle", out string targetChannelTitle);
+        CPH.TryGetArg("pronounSubject", out string pronoun);
+        CPH.TryGetArg("pronounObject", out string pronounObject);
+        CPH.TryGetArg("__source", out string sourceType);
+        CPH.TryGetArg("input1", out string showClip);
+
+        if (sourceType == "TwitchFirstWord")
+        {
+            if (!CPH.GetTwitchUserVar<bool>(user, "autoShoutout"))
+                return true;
+        }
+
+        var tokens = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["USER"]       = () => user,
+            ["STREAMER"]   = () => targetUser,
+            ["GAME"]       = () => game,
+            ["TITLE"]      = () => targetChannelTitle,
+            ["URL"]        = () =>
+            {
+                if (string.IsNullOrWhiteSpace(user)) return "";
+                var u = user.Replace(" ", "");
+                return string.Concat("https://twitch.tv/", u.ToLowerInvariant());
+            },
+            ["PRONOUN_SUBJECT"] = () => string.IsNullOrWhiteSpace(pronoun) ? "they" : pronoun,
+            ["PRONOUN_OBJECT"]  = () => string.IsNullOrWhiteSpace(pronounObject) ? "them" : pronounObject,
+            ["SUBJECT_WASWERE"] = () =>
+            {
+                var subj = string.IsNullOrWhiteSpace(pronoun) ? "they" : pronoun.Trim();
+                var be   = subj.Equals("they", StringComparison.OrdinalIgnoreCase) ? "were" : "was";
+                return string.Concat(subj, " ", be);
+            }
+        };
+
+        var template = FirstNonEmpty(
+            CPH.GetTwitchUserVar<string>(targetUser, "shoutoutTemplate"),
+            FallbackTemplate
+        );
+
+        var output = RenderTemplate(template, tokens);
+        if (!string.IsNullOrWhiteSpace(output))
+            CPH.SendMessage(output);
+
+        if (showClip is "noclip" or "no-clip")
+            return true;
+
         try
         {
-            string hash       = CPH.GetGlobalVar<string>("ShoutoutHash");
-            string clientId   = CPH.GetGlobalVar<string>("ShoutoutClientId");
-            string scene      = CPH.GetGlobalVar<string>("ShoutoutSceneName");
-            string source     = CPH.GetGlobalVar<string>("ShoutoutSourceName");
+            if (!string.IsNullOrWhiteSpace(targetUser))
+            {
+                var (slug, duration) = PickRandomClipSlug(targetUser);
+                if (string.IsNullOrEmpty(slug))
+                    return Fail("This streamer doesn't have any clips ≤ 30s!", $"No short clips for {targetUser}");
 
-            string username   = (string)args["user"];
-            string msgId      = (string)args["msgId"];
-            string targetUser = (string)args["targetUser"];
+                var (srcUrl, sig, tok) = GetClipInfo(slug, hash, clientId).GetAwaiter().GetResult();
+                if (string.IsNullOrEmpty(srcUrl) || string.IsNullOrEmpty(sig) || string.IsNullOrEmpty(tok))
+                    return Fail("I couldn't find that clip! Sadge", "Failed to retrieve clip info from GraphQL");
 
-            var (slug, duration) = PickRandomClipSlug(targetUser);
-            if (string.IsNullOrEmpty(slug))
-                return Fail("This streamer doesn't have any clips ≤ 30s!");
+                CPH.LogInfo($"SO - user={targetUser} clip={slug} dur={duration:0.##}s");
 
-            var (srcUrl, sig, tok) = GetClipInfo(slug, hash, clientId).GetAwaiter().GetResult();
-            if (string.IsNullOrEmpty(srcUrl) || string.IsNullOrEmpty(sig) || string.IsNullOrEmpty(tok))
-                return Fail("I couldn't find that clip! Sadge", "Failed to retrieve clip info from GraphQL");
+                /*
+                    Mimics a queue system so that multiple users can be shouted out without risking
+                    the new shoutout cutting the previous clip short.
+                */
+                lock (SoLock)
+                {
+                    PlayClip(scene, source, srcUrl!, sig!, tok!, duration);
+                }
+            }
+            else
+            {
+                CPH.LogWarn("SO - targetUser was empty; skipping clip.");
+            }
 
-            CPH.LogInfo($"AmeSO - user={targetUser} clip={slug} dur={duration:0.##}s");
-            PlayClip(scene, source, srcUrl!, sig!, tok!, duration);
             return true;
         }
         catch (Exception ex)
         {
-            CPH.LogError($"AmeSO - Exception: {ex}");
+            CPH.LogError($"SO - Exception: {ex}");
             return Fail("Something went wrong fetching that clip. Sadge");
         }
     }
+
+    private static string RenderTemplate(string template, IDictionary<string, Func<string>> registry)
+    {
+        if (string.IsNullOrEmpty(template)) return "";
+
+        return TokenRe.Replace(template, m =>
+        {
+            var key      = m.Groups[1].Value;
+            var modifier = m.Groups[2].Success ? m.Groups[2].Value : null;
+            var fallback = m.Groups[3].Success ? m.Groups[3].Value : null;
+
+            string value = null;
+            if (registry.TryGetValue(key, out var provider))
+                value = provider?.Invoke();
+
+            value = string.IsNullOrWhiteSpace(value) ? fallback : value;
+            value = ApplyModifier(value, modifier);
+
+            return value ?? m.Value; // if still null, keep the original token literal
+        });
+    }
+
+    private static string ApplyModifier(string value, string modifier)
+    {
+        if (value == null || string.IsNullOrWhiteSpace(modifier)) return value;
+
+        return modifier switch
+        {
+            "upper" => value.ToUpperInvariant(),
+            "lower" => value.ToLowerInvariant(),
+            "title" => TextInfo.ToTitleCase(value.ToLower()),
+            "trim" => value.Trim(),
+            _ => value,
+        };
+    }
+
+    private static string FirstNonEmpty(string a, string b) =>
+        !string.IsNullOrWhiteSpace(a) ? a :
+        !string.IsNullOrWhiteSpace(b) ? b : null;
 
     private (string slug, float duration) PickRandomClipSlug(string username)
     {
         var clips = CPH.GetClipsForUser(username, 50);
         if (clips == null || clips.Count == 0) return (null, 0);
 
-        var shortClips = clips
-            .Where(c => c != null && c.Duration <= (MaxClipDuration + DurationEpsilon))
-            .ToList();
+        int count = 0;
+        string pickedId = null;
+        float pickedDur = 0f;
 
-        if (shortClips.Count == 0)
+        foreach (var c in clips)
         {
-            CPH.LogInfo($"AmeSO - No clips ≤ {MaxClipDuration}s for {username}");
+            if (c == null) continue;
+            if (c.Duration > (MaxClipDuration + DurationEpsilon)) continue;
+
+            count++;
+            if (Rng.Next(count) == 0)
+            {
+                pickedId  = c.Id;
+                pickedDur = c.Duration + 1.5f;
+            }
+        }
+
+        if (pickedId == null)
+        {
+            CPH.LogInfo($"SO - No clips ≤ {MaxClipDuration}s for {username}");
             return (null, 0);
         }
 
-        var pick = shortClips[Rng.Next(shortClips.Count)];
-        CPH.LogInfo($"AmeSO - Picked clip id={pick.Id} url={pick.Url} dur={pick.Duration:0.##}");
-        return (pick.Id, pick.Duration);
+        CPH.LogInfo($"SO - Picked clip id={pickedId} dur={pickedDur:0.##}");
+        return (pickedId, pickedDur);
     }
 
     private async Task<(string sourceUrl, string signature, string token)> GetClipInfo(string clipId, string hash, string clientId)
     {
-        Http.DefaultRequestHeaders.Clear();
-        Http.DefaultRequestHeaders.Add("Client-ID", clientId);
+        using var req = new HttpRequestMessage(HttpMethod.Post, "https://gql.twitch.tv/gql");
+        req.Headers.TryAddWithoutValidation("Client-ID", clientId);
 
         var payloadObj = new
         {
@@ -77,83 +202,80 @@ public class CPHInline
             variables     = new { slug = clipId, platform = "web" },
             extensions    = new { persistedQuery = new { version = 1, sha256Hash = hash } }
         };
-
         var payload = JsonConvert.SerializeObject(payloadObj);
-        CPH.LogInfo($"AmeSO - Payload: {payload}");
+        req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-        var resp = await Http.PostAsync("https://gql.twitch.tv/gql",
-            new StringContent(payload, Encoding.UTF8, "application/json")).ConfigureAwait(false);
+        CPH.LogInfo($"SO - Payload: {payload}");
 
+        using var resp = await Http.SendAsync(req).ConfigureAwait(false);
         var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
         {
-            CPH.LogError($"AmeSO - GraphQL {resp.StatusCode}: {body}");
+            CPH.LogError($"SO - GraphQL {resp.StatusCode}: {body}");
             return (null, null, null);
         }
 
         var json = JObject.Parse(body);
-
         var pact  = json["data"]?["clip"]?["playbackAccessToken"];
         var sig   = pact?["signature"]?.ToString();
         var token = pact?["value"]?.ToString();
 
-        if (json["data"]?["clip"]?["videoQualities"] is not JArray q || q.Count == 0)
+        if (json["data"]?["clip"]?["videoQualities"] is not JArray arr || arr.Count == 0)
             return (null, null, null);
 
-        int preferredMax = 720;
+        const int preferredMax = 720;
 
-        var qualities = new List<(int height, double fps, string url)>();
-        foreach (var item in q)
+        (int h, double fps, string url) bestUnder = default;
+        (int h, double fps, string url) bestAny  = default;
+
+        foreach (var item in arr)
         {
-            string qualityStr = item?["quality"]?.ToString();
-            string url        = item?["sourceURL"]?.ToString();
-            string fpsStr     = item?["frameRate"]?.ToString();
+            var qualityStr = item?["quality"]?.ToString();
+            var url        = item?["sourceURL"]?.ToString();
+            var fpsStr     = item?["frameRate"]?.ToString();
 
             if (string.IsNullOrWhiteSpace(qualityStr) || string.IsNullOrWhiteSpace(url))
                 continue;
 
-            if (!int.TryParse(qualityStr, out int height))
+            if (!int.TryParse(qualityStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int height))
                 continue;
 
-            _ = double.TryParse(fpsStr, System.Globalization.NumberStyles.Float,
-                                System.Globalization.CultureInfo.InvariantCulture, out double fps);
+            _ = double.TryParse(fpsStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double fps);
 
-            qualities.Add((height, fps, url));
+            // Track overall best (highest h, then fps closest to 60)
+            if (bestAny.url == null ||
+                height > bestAny.h ||
+                (height == bestAny.h && Math.Abs(fps - 60.0) < Math.Abs(bestAny.fps - 60.0)))
+            {
+                bestAny = (height, fps, url);
+            }
+
+            if (height <= preferredMax &&
+                (bestUnder.url == null ||
+                 height > bestUnder.h ||
+                 (height == bestUnder.h && Math.Abs(fps - 60.0) < Math.Abs(bestUnder.fps - 60.0))))
+            {
+                bestUnder = (height, fps, url);
+            }
         }
 
-        if (qualities.Count == 0) return (null, null, null);
+        var pick = bestUnder.url != null ? bestUnder : bestAny;
+        if (pick.url == null) return (null, null, null);
 
-        // Pick highest ≤ preferredMax; else highest overall. Prefer fps near 30.
-        (int height, double fps, string url) pick =
-            qualities
-                .Where(qi => qi.height <= preferredMax)
-                .OrderByDescending(qi => qi.height)
-                .ThenBy(qi => Math.Abs(qi.fps - 30.0))
-                .FirstOrDefault();
-
-        if (string.IsNullOrEmpty(pick.url))
-        {
-            pick = qualities
-                .OrderByDescending(qi => qi.height)
-                .ThenBy(qi => Math.Abs(qi.fps - 30.0))
-                .First();
-        }
-
-        CPH.LogInfo($"AmeSO - Chosen quality: {pick.height}p @ ~{pick.fps:0.##}fps (preferredMax={preferredMax})");
-
+        CPH.LogInfo($"SO - Chosen quality: {pick.h}p @ ~{pick.fps:0.##}fps (preferredMax={preferredMax})");
         return (pick.url, sig, token);
     }
 
     private void PlayClip(string scene, string source, string sourceUrl, string signature, string token, float duration)
     {
-        var url   = $"{sourceUrl}?token={Uri.EscapeDataString(token)}&sig={signature}";
+        var url   = string.Concat(sourceUrl, "?token=", Uri.EscapeDataString(token), "&sig=", signature);
         var delay = Math.Max(0, (int)(Math.Min(duration, MaxClipDuration) * 1000));
 
-        CPH.LogInfo($"AmeSO - Final URL: {url}");
+        CPH.LogInfo($"SO - Final URL: {url}");
 
         CPH.ObsSetSourceVisibility(scene, source, false);
         CPH.ObsSetMediaSourceFile(scene, source, url);
-        CPH.Wait(500);
+        CPH.Wait(300);
         CPH.ObsSetSourceVisibility(scene, source, true);
         CPH.Wait(delay);
         CPH.ObsSetSourceVisibility(scene, source, false);
@@ -163,7 +285,7 @@ public class CPHInline
     private bool Fail(string chatMsg, string logMsg = null)
     {
         if (!string.IsNullOrEmpty(chatMsg)) CPH.SendMessage(chatMsg);
-        if (!string.IsNullOrEmpty(logMsg))  CPH.LogError($"AmeSO - {logMsg}");
+        if (!string.IsNullOrEmpty(logMsg))  CPH.LogError($"SO - {logMsg}");
         return false;
     }
 }

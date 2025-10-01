@@ -1,5 +1,4 @@
 # Twitch Shoutout with Random Clips for Streamer.bot
-
 This is a **Streamer.bot** action that lets you shout out other Twitch streamers with:
 
 `!shoutout <username>`
@@ -8,17 +7,36 @@ Instead of only posting a chat message, it grabs a random clip (up to 30 seconds
 
 ---
 
+## Commands
+#### [] = optional, <> = required
+- `!shoutout <username> [no-clip / noclip]` - Shouts out the user
+   - Aliases: `!so`
+   - Paramaters:
+     - `<username>` - The username of the person you want to shoutout, with or without mention (@)
+     - `[no-clip / noclip]` - Doesn't display a clip for the shoutout
+- `!autoshoutout <type> <username>` - Adds a user to the auto shout out list so that they get shouted out on their first message of each stream.
+  - Aliases: `!autoshout`, `!as`
+  - Paramaters:
+    - `<type>` - add, remove, or delete
+    - `<username>` - The username of the person you want to add to the list
+- `!setcustommessage <username> [template]` - Sets a custom message for the user, which you can spice up with the placeholders and modifiers below.
+  - Aliases: `!custommsg`, `!custommessage`, `!setcustommsg`, `!setcustommessage`, `!scm`
+  - Parameters:
+    - `<username>` - The username of the person you want to give a custom message
+    - `[template]` - The custom message you want the user to have
+  - Note: `[template]` is optional because if you don't specify a template then it will clear the users custom message and use the default instead.
+  
+---
+
 ## Features
-- Picks a random clip from the streamer (30s or less)
-- Plays directly in OBS through a media source
-- Sends a shoutout message in chat (customizable)
-- Posts a fallback message if no clips are found
-- Uses Twitch’s GraphQL API to get clip playback URLs
+- Shouts out users with the command, on raid, or on their first message on each stream if they are added to the auto shoutout list
+- Plays a random clip of the person getting shouted out
+- Has pronoun support so you can spice up custom messages with the users pronouns
+- Custom message for each user so you can give special people their own shoutout messages
 
 ---
 
 ## OBS Setup
-
 1. Create a **Media Source** in OBS.  
    (Doesn’t matter what file it points to — Streamer.bot will handle it.)
 2. Right-click the source → **Transform** → **Edit Transform**.
@@ -33,50 +51,38 @@ That’s all you need to do in OBS.
 ---
 
 ## Streamer.bot Setup
-
 1. Copy everything from `ImportString.txt`.
 2. In **Streamer.bot**, click **Import** at the top → paste → click **Import**.
 3. Go to **Commands** → find **Ame - Shoutout** → expand → right-click **Shoutout** → check **Enabled**.
 4. Go to **Actions & Queues** → **Actions** → find **Ame - Shoutout** → expand → click **Shoutout**.
-5. Update these global variables under **Sub-Actions**:
+5. Update these global variables under **Sub-Actions** → **Variables** (click the arrow to open folder):
    - `ShoutoutSceneName` → name of the OBS scene with your media source.
    - `ShoutoutSourceName` → name of the OBS media source you made.
 6. Leave `ShoutoutHash` and `ShoutoutClientId` alone unless Twitch changes them.
-7. Update the chat messages if you want:
-   - **True Result** → what to say if no username is provided.  
-   - **False Result** → what to say when shouting someone out (e.g., “Go show %targetUser% some love 💜”).
 
 ---
 
-## Common variables to use for the messages
-
-- %userName% - The username of the person that typed the command (all lowercase, e.g. ameliafromfinance)
-  - %user% - Same as above but with exact capitalization (e.g. AmeliaFromFinance)
-- %targetUserName% - The username of the person that is getting shouted out (all lowercase, e.g. ameliafromfinance)
-  - %targetUser% - Same as above but with exact capitalization (e.g. AmeliaFromFinance)
-- %game% - The game that they last streamed.
-- %targetChannelTitle% - The title of their last stream.
-- For URL type manually `https://twitch.tv/%targetUser%`
-
----
-
-## Usage
-
-Type in Twitch chat:
-
-`!shoutout <username>`
-
-- If the streamer has clips → one will play in OBS + a shoutout message is sent.  
-- If no clips are found → only the fallback message is sent.
+## Variables
+- `{USER}` - The username of the person **giving** the shoutout
+- `{STREAMER}` - The username of the person **receiving** the shoutout
+- `{GAME}` - The name of the game that the person receiving the shoutout was playing
+- `{TITLE}` - The title of their stream
+- `{URL}` - The link to their channel
+- `{PRONOUN_SUBJECT}` - The subject pronoun that they have set on `https://pr.alejo.io/` (She/He/Fae/etc...)
+- `{PRONOUN_OBJECT}` - The object pronoun that they have set on `https://pr.alejo.io/` (Her/Him/Faer/etc...)
+- `{SUBJECT_WASWERE}` - The subject pronoun + was/were, for example, if their subject pronoun is 'they' then it will say 'they were', and if it's 'she' then it will say 'she was'
 
 ---
 
-## Technical Notes
-
-- Written as a C# Inline Script for Streamer.bot
-- Pulls clip info from Twitch’s GraphQL API (`https://gql.twitch.tv/gql`)
-- Picks the best clip quality up to 720p, prefers ~30fps
-- Uses Streamer.bot’s OBS WebSocket integration to control the media source
+## Modifiers / Default value
+Explanation:
+Any modifers/default applied to a variable will change how it gets outputted.
+Example, if I put {GAME:upper|something awesome}, then it means that **if** the game is found then it will display the game in all uppercase, and if it's not found then it will just say 'something awesome', I prefer to use `:title` for {GAME} because some games like 'Valorant' are set to all uppercase on Twitch, so this ensures only the first character of each word is uppercase to make it more consistent.
+- `:upper` - Puts to all uppercase
+- `:lower` - Puts to all lowercase
+- `:title` - Puts the first character of each word to uppercase
+- `:trim` - Removes all leading/trailing spaces so that spacing is exact
+- `|<whatever>` - Sets the default value to output if other value isn't found
 
 ---
 
