@@ -9,11 +9,11 @@ Instead of only posting a chat message, it grabs a random clip (up to 30 seconds
 
 ## Commands
 #### [] = optional, <> = required
-- `!shoutout <username> [no-clip / noclip]` - Shouts out the user
+- `!shoutout <username> [clip_url or noclip]` - Shouts out the user
    - Aliases: `!so`
    - Paramaters:
      - `<username>` - The username of the person you want to shoutout, with or without mention (@)
-     - `[no-clip / noclip]` - Doesn't display a clip for the shoutout
+     - `[clip_url or noclip]` - URL to a specifc clip to display, or 'noclip' / 'no-clip' to not display any clip
 - `!autoshoutout <type> <username>` - Adds a user to the auto shout out list so that they get shouted out on their first message of each stream.
   - Aliases: `!autoshout`, `!as`
   - Paramaters:
@@ -58,6 +58,7 @@ That’s all you need to do in OBS.
 5. Update these global variables under **Sub-Actions** → **Variables** (click the arrow to open folder):
    - `ShoutoutSceneName` → name of the OBS scene with your media source.
    - `ShoutoutSourceName` → name of the OBS media source you made.
+   - `clipsWithinDays` → get clips within 'x' days so that it doesn't display clips that are years old (default: 90)
 6. Leave `ShoutoutHash` and `ShoutoutClientId` alone unless Twitch changes them.
 
 ---
