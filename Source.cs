@@ -16,10 +16,10 @@ public class CPHInline
     private static readonly HttpClient Http = new();
     private static readonly Random Rng = new();
     private static readonly TextInfo TextInfo = CultureInfo.CurrentCulture.TextInfo;
-    private static readonly object SoLock = new(); // Lock to serialize OBS playback
+    private static readonly object SoLock = new();
 
     // --------------- Settings ---------------
-    private const float MaxClipDuration = 30.0f;   // max clip duration to play
+    private const float MaxClipDuration = 30.0f;
     private const float DurationEpsilon = 0.05f;   // small buffer for floating point comparisons
     private const string FallbackTemplate =
         "Go show @{STREAMER} some love, {LIVE_STATUS:lower} {GAME:title|something awesome}!";
@@ -29,11 +29,10 @@ public class CPHInline
     private static readonly Regex TokenRe = new(
         @"\{([A-Za-z0-9_]+)(?::([A-Za-z0-9_]+))?(?:\|([^}]*))?\}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     private static readonly Regex ClipSlugOnlyRe = new(@"^[A-Za-z0-9-]{10,100}$",
     RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    // GQL persisted query hashes
+    // GQL hashes
     private const string UseLiveSha256   = "639d5f11bfb8bf3053b424d9ef650d04c4ebb7d94711d644afb08fe9a0fad5d9";
     private const string ChatClipSha256  = "9aa558e066a22227c5ef2c0a8fded3aaa57d35181ad15f63df25bff516253a90";
 
@@ -61,41 +60,29 @@ public class CPHInline
         user       = user?.Trim();
         if (days <= 0) days = 90;
 
-        // Only run if autoShoutout is enabled for the user in FirstWord flow
         if (sourceType == "TwitchFirstWord" && !CPH.GetTwitchUserVar<bool>(user, "autoShoutout"))
             return true;
 
-        // ----- Live check -----
         bool isLive = false;
         try
         {
             if (!string.IsNullOrWhiteSpace(targetUser))
                 isLive = IsChannelLiveAsync(targetUser.ToLowerInvariant(), clientId).GetAwaiter().GetResult();
         }
-        catch (Exception ex)
-        {
-            CPH.LogWarn($"SO - Live check failed: {ex.Message}");
-        }
+        catch (Exception ex) { CPH.LogWarn($"SO - Live check failed: {ex.Message}"); }
 
         // ----- Template -> Chat -----
         Dictionary<string, Func<string>> tokens = BuildTokens(user, targetUser, game, targetChannelTitle, pronoun, pronounObject, isLive);
-
         string template = FirstNonEmpty(
             CPH.GetTwitchUserVar<string>(targetUser, "shoutoutTemplate"),
             FallbackTemplate
         );
-
         string output = RenderTemplate(template, tokens);
-        if (!string.IsNullOrWhiteSpace(output))
-            CPH.SendMessage(output);
-
-        // Respect explicit "no clip"
-        if (showClip is "noclip" or "no-clip")
-            return true;
+        if (!string.IsNullOrWhiteSpace(output)) CPH.SendMessage(output);
+        if (showClip is "noclip" or "no-clip") return true;
 
         // ----- Clip selection & playback -----
         string clipOverrideSlug = ExtractClipSlug(showClip);
-
         if (!string.IsNullOrWhiteSpace(clipOverrideSlug))
         {
             try
@@ -105,17 +92,10 @@ public class CPHInline
                     return Fail("I couldn't play that clip (bad URL/slug).", "Clip override: failed to retrieve access token");
 
                 float? durSec = GetClipDurationSecondsAsync(clipOverrideSlug, clientId).GetAwaiter().GetResult();
+                float duration = Math.Min(durSec.GetValueOrDefault(20f) + 1f, MaxClipDuration);
+                CPH.LogInfo($"SO - Override clip slug={clipOverrideSlug} duration={(durSec.HasValue ? $"{durSec.Value:0.##}s" : "unknown")}");
 
-                float duration = durSec.HasValue
-                    ? Math.Min(durSec.Value + 1.0f, MaxClipDuration)
-                    : Math.Min(20.0f, MaxClipDuration);
-
-                CPH.LogInfo($"SO - Override clip slug={clipOverrideSlug} duration={(durSec.HasValue ? durSec.Value.ToString("0.##") + "s" : "unknown")}");
-
-                lock (SoLock)
-                {
-                    PlayClip(scene, source, srcUrl, sig, tok, duration);
-                }
+                lock (SoLock) PlayClip(scene, source, srcUrl, sig, tok, duration);
                 return true;
             }
             catch (Exception ex)
@@ -142,13 +122,7 @@ public class CPHInline
                 return Fail("I couldn't find that clip! Sadge", "Failed to retrieve clip info from GraphQL");
 
             CPH.LogInfo($"SO - user={targetUser} clip={slug} dur={duration:0.##}s");
-
-            // Serialize clip playback so multiple shoutouts don't overlap
-            lock (SoLock)
-            {
-                PlayClip(scene, source, srcUrl!, sig!, tok!, duration);
-            }
-
+            lock (SoLock) PlayClip(scene, source, srcUrl!, sig!, tok!, duration);
             return true;
         }
         catch (Exception ex)
@@ -160,38 +134,31 @@ public class CPHInline
 
     // --------------- Template rendering ---------------
     private static string RenderTemplate(string template, IDictionary<string, Func<string>> registry)
-    {
-        if (string.IsNullOrEmpty(template)) return "";
+        => string.IsNullOrEmpty(template)
+            ? ""
+            : TokenRe.Replace(template, m =>
+            {
+                string key = m.Groups[1].Value;
+                string modifier = m.Groups[2].Success ? m.Groups[2].Value : null;
+                string fallback = m.Groups[3].Success ? m.Groups[3].Value : null;
 
-        return TokenRe.Replace(template, m =>
+                registry.TryGetValue(key, out Func<string> provider);
+                string value = provider?.Invoke();
+                value = string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+                return ApplyModifier(value, modifier) ?? m.Value;
+            });
+
+    private static string ApplyModifier(string value, string modifier) => 
+        string.IsNullOrWhiteSpace(modifier) ? value :
+        modifier switch
         {
-            string key      = m.Groups[1].Value;
-            string modifier = m.Groups[2].Success ? m.Groups[2].Value : null;
-            string fallback = m.Groups[3].Success ? m.Groups[3].Value : null;
-
-            registry.TryGetValue(key, out Func<string> provider);
-            string value = provider?.Invoke();
-
-            value = string.IsNullOrWhiteSpace(value) ? fallback : value;
-            value = ApplyModifier(value, modifier);
-
-            return value ?? m.Value;
-        });
-    }
-
-    private static string ApplyModifier(string value, string modifier)
-    {
-        if (value == null || string.IsNullOrWhiteSpace(modifier)) return value;
-
-        return modifier switch
-        {
-            "upper" => value.ToUpperInvariant(),
-            "lower" => value.ToLowerInvariant(),
-            "title" => TextInfo.ToTitleCase(value.ToLower()),
-            "trim"  => value.Trim(),
-            _       => value,
+            "upper" => value?.ToUpperInvariant(),
+            "lower" => value?.ToLowerInvariant(),
+            "title" => value is null ? null : TextInfo.ToTitleCase(value.ToLower()),
+            "trim"  => value?.Trim(),
+            _       => value
         };
-    }
 
     private static string FirstNonEmpty(string a, string b) =>
         !string.IsNullOrWhiteSpace(a) ? a :
@@ -212,33 +179,20 @@ public class CPHInline
         string subj = OrDefault(pronounSubject, "they").Trim();
         string obj = OrDefault(pronounObject, "them").Trim();
         bool isThey = subj.Equals("they", StringComparison.OrdinalIgnoreCase);
-
-        // Helper to return correct verb (is/are/was/were)
         string AreIs(bool present) => present ? (isThey ? "are" : "is") : (isThey ? "were" : "was");
 
         return new(StringComparer.OrdinalIgnoreCase)
         {
-            ["USER"] = () => user,
-            ["STREAMER"] = () => targetUser,
-            ["GAME"] = () => game,
-            ["TITLE"] = () => targetChannelTitle,
-            ["URL"] = () =>
-            {
-                if (string.IsNullOrWhiteSpace(user)) return "";
-                string u = user.Replace(" ", "");
-                return $"https://twitch.tv/{u.ToLowerInvariant()}";
-            },
-            ["PRONOUN_SUBJECT"] = () => subj,
-            ["PRONOUN_OBJECT"] = () => obj,
-            ["SUBJECT_WASWERE"] = () => $"{subj} {AreIs(false)}",
-            ["SUBJECT_ISARE"] = () => $"{subj} {AreIs(true)}",
-            ["LIVE_STATUS"] = () =>
-            {
-                string verb = AreIs(isLive);
-                return isLive
-                    ? $"{subj} {verb} currently streaming"
-                    : $"{subj} {verb} last streaming";
-            }
+            ["USER"]             = () => user,
+            ["STREAMER"]         = () => targetUser,
+            ["GAME"]             = () => game,
+            ["TITLE"]            = () => targetChannelTitle,
+            ["URL"]              = () => string.IsNullOrWhiteSpace(user) ? "" : $"https://twitch.tv/{user.Replace(" ", "").ToLowerInvariant()}",
+            ["PRONOUN_SUBJECT"]  = () => subj,
+            ["PRONOUN_OBJECT"]   = () => obj,
+            ["SUBJECT_WASWERE"]  = () => $"{subj} {AreIs(false)}",
+            ["SUBJECT_ISARE"]    = () => $"{subj} {AreIs(true)}",
+            ["LIVE_STATUS"]      = () => $"{subj} {AreIs(isLive)} {(isLive ? "currently streaming" : "last streaming")}"
         };
     }
 
@@ -248,25 +202,19 @@ public class CPHInline
         if (string.IsNullOrWhiteSpace(input)) return null;
         input = input.Trim().Trim('"', '\'');
 
-        if (ClipSlugOnlyRe.IsMatch(input))
-            return input;
+        if (ClipSlugOnlyRe.IsMatch(input)) return input;
 
         if (Uri.TryCreate(input, UriKind.Absolute, out var uri))
         {
+            var segs = uri.AbsolutePath.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
             if (uri.Host.EndsWith("clips.twitch.tv", StringComparison.OrdinalIgnoreCase))
-            {
-                var segs = uri.AbsolutePath.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
-                return segs.Length >= 1 ? segs[segs.Length - 1] : null;
-            }
+                return segs.LastOrDefault();
 
             if (uri.Host.EndsWith("twitch.tv", StringComparison.OrdinalIgnoreCase))
             {
-                var segs = uri.AbsolutePath.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
                 for (int i = 0; i < segs.Length - 1; i++)
-                {
                     if (segs[i].Equals("clip", StringComparison.OrdinalIgnoreCase))
                         return segs[i + 1];
-                }
             }
         }
 
@@ -292,17 +240,12 @@ public class CPHInline
         try
         {
             JObject json = JObject.Parse(body);
-            var durTok = json["data"]?["clip"]?["durationSeconds"];
-            if (durTok != null && durTok.Type != JTokenType.Null)
-            {
-                if (float.TryParse(durTok.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
-                    return v;
-            }
+            JToken durTok = json["data"]?["clip"]?["durationSeconds"];
+            if (durTok != null && durTok.Type != JTokenType.Null &&
+                float.TryParse(durTok.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+                return v;
         }
-        catch (Exception ex)
-        {
-            CPH.LogWarn($"SO - ChatClip parse error: {ex.Message}");
-        }
+        catch (Exception ex) { CPH.LogWarn($"SO - ChatClip parse error: {ex.Message}"); }
         return null;
     }
 
@@ -320,13 +263,8 @@ public class CPHInline
         foreach (ClipData c in clips)
         {
             if (c.Duration > (MaxClipDuration + DurationEpsilon)) continue;
-
             count++;
-            if (Rng.Next(count) == 0)
-            {
-                pickedId = c.Id;
-                pickedDur = c.Duration + 1.5f; // small buffer to avoid early cut
-            }
+            if (Rng.Next(count) == 0) { pickedId = c.Id; pickedDur = c.Duration + 1.5f; }
         }
 
         if (pickedId == null)
@@ -364,17 +302,16 @@ public class CPHInline
         if (json["data"]?["clip"]?["videoQualities"] is not JArray arr || arr.Count == 0)
             return (null, null, null);
 
-        (int h, double fps, string url) pick = ChooseClipQuality(arr, preferredMax: 720);
-        if (pick.url == null) return (null, null, null);
+        (int h, double fps, string url) = ChooseClipQuality(arr, preferredMax: 720);
+        if (url == null) return (null, null, null);
 
-        CPH.LogInfo($"SO - Chosen quality: {pick.h}p @ ~{pick.fps:0.##}fps (preferredMax=720)");
-        return (pick.url, sig, token);
+        CPH.LogInfo($"SO - Chosen quality: {h}p @ ~{fps:0.##}fps (preferredMax=720)");
+        return (url, sig, token);
     }
 
     private static (int h, double fps, string url) ChooseClipQuality(JArray qualities, int preferredMax)
     {
-        (int h, double fps, string url) bestUnder = default;
-        (int h, double fps, string url) bestAny  = default;
+        (int h, double fps, string url) bestUnder = default, bestAny  = default;
 
         foreach (JToken item in qualities)
         {
@@ -382,40 +319,22 @@ public class CPHInline
             string url        = item?["sourceURL"]?.ToString();
             string fpsStr     = item?["frameRate"]?.ToString();
 
-            if (string.IsNullOrWhiteSpace(qualityStr) || string.IsNullOrWhiteSpace(url))
-                continue;
-
-            if (!int.TryParse(qualityStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int height))
-                continue;
-
+            if (string.IsNullOrWhiteSpace(qualityStr) || string.IsNullOrWhiteSpace(url)) continue;
+            if (!int.TryParse(qualityStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int h)) continue;
             _ = double.TryParse(fpsStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double fps);
 
-            // best overall
-            if (bestAny.url == null ||
-                height > bestAny.h ||
-                (height == bestAny.h && Math.Abs(fps - 60.0) < Math.Abs(bestAny.fps - 60.0)))
-            {
-                bestAny = (height, fps, url);
-            }
+            if (bestAny.url == null || h > bestAny.h || (h == bestAny.h && Math.Abs(fps - 60.0) < Math.Abs(bestAny.fps - 60.0)))
+                bestAny = (h, fps, url);
 
-            // best under preferredMax
-            if (height <= preferredMax &&
-                (bestUnder.url == null ||
-                 height > bestUnder.h ||
-                 (height == bestUnder.h && Math.Abs(fps - 60.0) < Math.Abs(bestUnder.fps - 60.0))))
-            {
-                bestUnder = (height, fps, url);
-            }
+            if (h <= preferredMax && (bestUnder.url == null || h > bestUnder.h || (h == bestUnder.h && Math.Abs(fps - 60.0) < Math.Abs(bestUnder.fps - 60.0))))
+                bestUnder = (h, fps, url);
         }
-
-        // Prefer ≤ preferredMax, else fallback to best overall
         return bestUnder.url != null ? bestUnder : bestAny;
     }
 
     private static async Task<bool> IsChannelLiveAsync(string username, string clientId)
     {
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(clientId))
-            return false;
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(clientId)) return false;
 
         using HttpResponseMessage resp = await PostGqlAsync(clientId, new
         {
@@ -428,8 +347,6 @@ public class CPHInline
 
         string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         JObject json = JObject.Parse(body);
-
-        // If "stream" exists => live
         return json["data"]?["user"]?["stream"]?.Type is not null and not JTokenType.Null;
     }
 
@@ -443,9 +360,9 @@ public class CPHInline
 
         CPH.ObsSetSourceVisibility(scene, source, false);
         CPH.ObsSetMediaSourceFile(scene, source, url);
-        CPH.Wait(300); // small buffer before making visible
+        CPH.Wait(300);
         CPH.ObsSetSourceVisibility(scene, source, true);
-        CPH.Wait(delay); // wait until clip finishes
+        CPH.Wait(delay);
         CPH.ObsSetSourceVisibility(scene, source, false);
         CPH.ObsSetMediaSourceFile(scene, source, "");
     }
@@ -455,10 +372,7 @@ public class CPHInline
     {
         using HttpRequestMessage req = new(HttpMethod.Post, "https://gql.twitch.tv/gql");
         req.Headers.TryAddWithoutValidation("Client-ID", clientId);
-
-        string payload = JsonConvert.SerializeObject(payloadObj);
-        req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
-
+        req.Content = new StringContent(JsonConvert.SerializeObject(payloadObj), Encoding.UTF8, "application/json");
         return await Http.SendAsync(req).ConfigureAwait(false);
     }
 
