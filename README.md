@@ -1,106 +1,113 @@
-# Twitch Shoutout with Random Clips for Streamer.bot
-This is a **Streamer.bot** action that lets you shout out other Twitch streamers with:
+# Twitch Shoutout with Random Clips for Streamer.bot  
 
-`!shoutout <username>`
+This action for **Streamer.bot** makes your shoutouts more engaging by pulling a random clip (up to 30 seconds) from the streamer you’re shouting out and playing it directly in OBS — along with a customizable chat message.  
 
-Instead of only posting a chat message, it grabs a random clip (up to 30 seconds long) from the streamer and plays it in your OBS scene.
-
----
-
-## Commands
-#### [] = optional, <> = required
-- `!shoutout <username> [clip_url or noclip]` - Shouts out the user
-   - Aliases: `!so`
-   - Paramaters:
-     - `<username>` - The username of the person you want to shoutout, with or without mention (@)
-     - `[clip_url or noclip]` - URL to a specifc clip to display, or 'noclip' / 'no-clip' to not display any clip
-- `!autoshoutout <type> <username>` - Adds a user to the auto shout out list so that they get shouted out on their first message of each stream.
-  - Aliases: `!autoshout`, `!as`
-  - Paramaters:
-    - `<type>` - add, remove, or delete
-    - `<username>` - The username of the person you want to add to the list
-- `!setcustommessage <username> [template]` - Sets a custom message for the user, which you can spice up with the placeholders and modifiers below.
-  - Aliases: `!custommsg`, `!custommessage`, `!setcustommsg`, `!setcustommessage`, `!scm`
-  - Parameters:
-    - `<username>` - The username of the person you want to give a custom message
-    - `[template]` - The custom message you want the user to have
-  - Note: `[template]` is optional because if you don't specify a template then it will clear the users custom message and use the default instead.
-  
----
-
-## Features
-- Shouts out users with the command, on raid, or on their first message on each stream if they are added to the auto shoutout list
-- Plays a random clip of the person getting shouted out
-- Has pronoun support so you can spice up custom messages with the users pronouns
-- Custom message for each user so you can give special people their own shoutout messages
+Instead of only typing a message in chat, your community will actually see and hear a highlight from the person you’re shouting out.  
 
 ---
 
-## OBS Setup
-1. Create a **Media Source** in OBS.  
-   (Doesn’t matter what file it points to — Streamer.bot will handle it.)
-2. Right-click the source → **Transform** → **Edit Transform**.
-3. Change **Bounding Box Type** to `Stretch to bounds`.
-4. Set the **Bounding Box Size**:
-   - Width (first box) → e.g. `1920.0000`  
-   - Height (second box) → e.g. `1080.0000`
-5. Place/resize the source where you want clips to show.
+## Quick Setup  
 
-That’s all you need to do in OBS.
+### 1. OBS Setup  
+1. Create a **Media Source** in OBS (the file path doesn’t matter).  
+2. Right-click the source → **Transform → Edit Transform**.  
+3. Change **Bounding Box Type** to `Stretch to bounds`.  
+4. Set **Bounding Box Size** to match your canvas (e.g. `1920x1080`).  
+5. Resize and position the source where you’d like clips to play.  
 
 ---
 
-## Streamer.bot Setup
-1. Copy everything from `ImportString.txt`.
-2. In **Streamer.bot**, click **Import** at the top → paste → click **Import**.
-3. Go to **Commands** → find **Ame - Shoutout** → expand → right-click each command (**Auto Shoutout**, **Set Custom Message**, and **Shoutout**) → check **Enabled**.
-4. Go to **Actions & Queues** → **Actions** → find **Ame - Shoutout** → expand → click **Shoutout**.
-5. Update these global variables under **Sub-Actions** → **Variables** (click the arrow to open folder):
-   - `ShoutoutSceneName` → name of the OBS scene with your media source.
-   - `ShoutoutSourceName` → name of the OBS media source you made.
-   - `clipsWithinDays` → get clips within 'x' days so that it doesn't display clips that are years old (default: 90)
-6. Leave `ShoutoutHash` and `ShoutoutClientId` alone unless Twitch changes them.
+### 2. Streamer.bot Setup  
+1. Copy everything from `ImportString.txt`.  
+2. In **Streamer.bot**, click **Import**, paste, and confirm.  
+3. Enable the commands:  
+   - `!shoutout` (alias: `!so`)  
+   - `!autoshoutout` (alias: `!as`)  
+   - `!setcustommessage` (alias: `!scm`)  
+4. Open **Actions → Ame - Shoutout → Shoutout → Variables** and set:  
+   - `ShoutoutSceneName` → the OBS scene with your media source  
+   - `ShoutoutSourceName` → the name of the OBS media source  
+   - `clipsWithinDays` → how recent clips must be (default: 90 days)  
+5. Leave `ShoutoutHash` and `ShoutoutClientId` alone unless Twitch changes their API.  
 
 ---
 
-## Variables
-- `{USER}` - The username of the person **giving** the shoutout
-- `{STREAMER}` - The username of the person **receiving** the shoutout
-- `{GAME}` - The name of the game that the person receiving the shoutout was playing
-- `{TITLE}` - The title of their stream
-- `{URL}` - The link to their channel
-- `{PRONOUN_SUBJECT}` - The subject pronoun that they have set on `https://pr.alejo.io/` (She/He/Fae/etc...)
-- `{PRONOUN_OBJECT}` - The object pronoun that they have set on `https://pr.alejo.io/` (Her/Him/Faer/etc...)
-- `{SUBJECT_WASWERE}` - The subject pronoun + was/were, for example, if their subject pronoun is 'they' then it will say 'they were', and if it's 'she' then it will say 'she was'
-- `{SUBJECT_ISARE}` - The subject pronoun + was/were, for example, if their subject pronoun is 'they' then it will say 'they are', and if it's 'she' then it will say 'she is'
-- `{LIVE_STATUS}` - Will say 'they are currently streaming' if the person is live and their subject pronoun is they (also default), or 'she/he/fae is currently streaming' if the subject pronoun isn't they.
-  - If the person isn't live then it will say 'they were last streaming' or 'she/he/fae was last streaming'
-  - Example:
-    - If the template was 'Go show @{STREAMER} some love, {LIVE_STATUS:lower} {GAME:title|something awesome}!' and I was shouted out while I was streaming then it would say **"Go show @AmeliaFromFinance some love, she is currently streaming Software And Game Development!"**, or **"Go show @AmeliaFromFinance some love, she was last streaming Software And Game Development!"** if I wasn't streaming.
+## Commands  
+
+| Command | Aliases | What it does |
+|---------|---------|--------------|
+| `!shoutout <username> [clip_url / noclip]` | `!so` | Shoutouts a user. Optionally play a specific clip (`clip_url`) or no clip at all (`noclip`). |
+| `!autoshoutout <add/remove> <username>` | `!autoshout`, `!as` | Manage an auto-shoutout list. Streamers on this list are shouted out automatically when they send their first message of the stream. |
+| `!setcustommessage <username> [template]` | `!custommsg`, `!scm` | Sets a custom shoutout message for a user. If no template is provided, their custom message is cleared and the default is used. |
 
 ---
 
-## Modifiers / Default value
-Explanation:
-Any modifers/default applied to a variable will change how it gets outputted.
-Example, if I put {GAME:upper|something awesome}, then it means that **if** the game is found then it will display the game in all uppercase, and if it's not found then it will just say 'something awesome', I prefer to use `:title` for {GAME} because some games like 'Valorant' are set to all uppercase on Twitch, so this ensures only the first character of each word is uppercase to make it more consistent.
-- `:upper` - Puts to all uppercase
-- `:lower` - Puts to all lowercase
-- `:title` - Puts the first character of each word to uppercase
-- `:trim` - Removes all leading/trailing spaces so that spacing is exact
-- `|<whatever>` - Sets the default value to output if other value isn't found
+## Features  
+
+- Shoutouts can be triggered manually, on raid, or automatically.  
+- Plays a random clip from the target streamer (≤ 30 seconds).  
+- Supports pronouns via [pr.alejo.io](https://pr.alejo.io/).  
+- Allows fully customizable shoutout messages per user.  
 
 ---
 
-## Notes
+## Message Tokens  
 
-- Twitch’s GraphQL API isn’t intended for external use, so things may break if Twitch changes stuff.
-- If that happens, you may need to update:
-  - `ShoutoutHash`
-  - `ShoutoutClientId`
+You can customize shoutout templates with tokens.  
+
+| Token | Description |
+|-------|-------------|
+| `{USER}` | The person giving the shoutout |
+| `{STREAMER}` | The person receiving the shoutout |
+| `{GAME}` | The game they were playing |
+| `{TITLE}` | Their stream title |
+| `{URL}` | A link to their channel |
+| `{PRONOUN_SUBJECT}` | Subject pronoun (she/he/they/fae) |
+| `{PRONOUN_OBJECT}` | Object pronoun (her/him/them/faer) |
+| `{SUBJECT_WASWERE}` | e.g. “she was” / “they were” |
+| `{SUBJECT_ISARE}` | e.g. “he is” / “they are” |
+| `{LIVE_STATUS}` | Shows if they’re live or not (e.g. “she is currently streaming” or “they were last streaming”) |
+
+**Example:**  
+```
+Go show @{STREAMER} some love, {LIVE_STATUS:lower} {GAME:title|something awesome}!
+```
+Will output the following if 'AmeliaFromFinance' is currently live:  
+> Go show @AmeliaFromFinance some love, she is currently streaming Software And Game Development!
+
+Or, will output the following if 'AmeliaFromFinance' is not live:  
+> Go show @AmeliaFromFinance some love, she was last streaming Software And Game Development!  
 
 ---
 
-## Support
+## Modifiers and Defaults  
 
-If you run into problems, DM **`eintr`** on Discord.
+You can adjust how tokens are displayed with modifiers and default values.  
+
+- `:upper` → convert to UPPERCASE  
+- `:lower` → convert to lowercase  
+- `:title` → capitalize first letter of each word  
+- `:trim` → remove extra spaces  
+- `|default` → provide fallback text if token is empty  
+
+**Example:**  
+```
+{GAME:upper|something awesome}
+```
+- If the game is found → `VALORANT`  
+- If not → `something awesome`  
+
+---
+
+## Notes  
+
+- This uses Twitch’s GraphQL API. It may break if Twitch changes things.  
+- If clips stop working, you may need to update:  
+  - `ShoutoutHash`  
+  - `ShoutoutClientId`  
+
+---
+
+## Support  
+
+If you run into issues, reach out on Discord: **eintr**  

@@ -155,11 +155,40 @@ public class CPHInline
         {
             "upper" => value?.ToUpperInvariant(),
             "lower" => value?.ToLowerInvariant(),
-            "title" => value is null ? null : TextInfo.ToTitleCase(value.ToLower()),
+            "title" => value is null ? null : ToTitleCase(value.ToLowerInvariant()),
             "trim"  => value?.Trim(),
             _       => value
         };
 
+    private static string ToTitleCase(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+
+        HashSet<string> smallWords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "an", "the",
+            "and", "but", "or", "nor", "for", "so", "yet",
+            "at", "around", "by", "after", "along", "for", "from", "of", "on", "to", "with", "without", "over", "into", "like", "up", "down", "in", "out", "per"
+        };
+
+        string[] words = input.Split([' '], StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < words.Length; i++)
+        {
+            string w = words[i];
+
+            if (i == 0 || i == words.Length - 1 || !smallWords.Contains(w))
+            {
+                words[i] = char.ToUpperInvariant(w[0]) + w.Substring(1).ToLowerInvariant();
+            }
+            else
+            {
+                words[i] = w.ToLowerInvariant();
+            }
+        }
+
+        return string.Join(" ", words);
+    }
+    
     private static string FirstNonEmpty(string a, string b) =>
         !string.IsNullOrWhiteSpace(a) ? a :
         !string.IsNullOrWhiteSpace(b) ? b : null;
