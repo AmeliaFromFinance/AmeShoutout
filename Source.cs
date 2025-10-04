@@ -44,6 +44,7 @@ public class CPHInline
         string scene    = CPH.GetGlobalVar<string>("ShoutoutSceneName");
         string source   = CPH.GetGlobalVar<string>("ShoutoutSourceName");
         int days        = CPH.GetGlobalVar<int>("clipsWithinDays");
+        bool prePopular = CPH.GetGlobalVar<bool>("preferPopularClips");
 
         // ----- Event args -----
         CPH.TryGetArg("user", out string user);
@@ -113,7 +114,7 @@ public class CPHInline
                 return true;
             }
 
-            (string slug, float duration) = PickRandomClipSlug(targetUser, days);
+            (string slug, float duration) = PickClipSlug(targetUser, days, prePopular);
             if (string.IsNullOrEmpty(slug))
                 return Fail($"{targetUser} doesn't have any clips within the last {days} days that are 30s or less!", $"No short clips for {targetUser}");
 
@@ -166,9 +167,10 @@ public class CPHInline
 
         HashSet<string> smallWords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "a", "an", "the",
-            "and", "but", "or", "nor", "for", "so", "yet",
-            "at", "around", "by", "after", "along", "for", "from", "of", "on", "to", "with", "without", "over", "into", "like", "up", "down", "in", "out", "per"
+            "a", "after", "along", "an", "and", "around", "at", 
+            "but", "by", "down", "for", "from", "in", "into", 
+            "like", "nor", "of", "on", "or", "out", "over", 
+            "per", "so", "the", "to", "up", "with", "without", "yet"
         };
 
         string[] words = input.Split([' '], StringSplitOptions.RemoveEmptyEntries);
@@ -188,7 +190,7 @@ public class CPHInline
 
         return string.Join(" ", words);
     }
-    
+
     private static string FirstNonEmpty(string a, string b) =>
         !string.IsNullOrWhiteSpace(a) ? a :
         !string.IsNullOrWhiteSpace(b) ? b : null;
@@ -216,7 +218,7 @@ public class CPHInline
             ["STREAMER"]         = () => targetUser,
             ["GAME"]             = () => game,
             ["TITLE"]            = () => targetChannelTitle,
-            ["URL"]              = () => string.IsNullOrWhiteSpace(user) ? "" : $"https://twitch.tv/{user.Replace(" ", "").ToLowerInvariant()}",
+            ["URL"]              = () => string.IsNullOrWhiteSpace(targetUser) ? "" : $"https://twitch.tv/{targetUser.Replace(" ", "").ToLowerInvariant()}",
             ["PRONOUN_SUBJECT"]  = () => subj,
             ["PRONOUN_OBJECT"]   = () => obj,
             ["SUBJECT_WASWERE"]  = () => $"{subj} {AreIs(false)}",
@@ -279,6 +281,62 @@ public class CPHInline
     }
 
     // --------------- Clip selection ---------------
+    private (string slug, float duration) PickClipSlug(string username, int days, bool preferPopular)
+        => preferPopular
+            ? PickWeightedClipSlug(username, days)
+            : PickRandomClipSlug(username, days);
+
+    // Weighted random: purely based on view count
+    private (string slug, float duration) PickWeightedClipSlug(string username, int days)
+    {
+        List<ClipData> clips = [.. CPH.GetClipsForUser(username)
+            .Where(c => c.CreatedAt >= DateTime.UtcNow.AddDays(-days))];
+
+        if (clips.Count == 0) return (null, 0);
+
+        var eligible = clips.Where(c => c.Duration <= (MaxClipDuration + DurationEpsilon)).ToList();
+        if (eligible.Count == 0)
+        {
+            CPH.LogInfo($"SO - No clips ≤ {MaxClipDuration}s for {username}");
+            return (null, 0);
+        }
+
+        var scored = eligible.Select(c =>
+        {
+            long views = Math.Max(0, c.ViewCount);
+            double w = views + 1.0;
+            return (c, w);
+        }).ToList();
+
+        double total = scored.Sum(x => x.w);
+        if (total <= 0.0)
+        {
+            CPH.LogInfo($"SO - Weighted sum=0 for {username}; falling back to uniform.");
+            return PickRandomClipSlug(username, days);
+        }
+
+        double pick = Rng.NextDouble() * total;
+        foreach (var (c, w) in scored)
+        {
+            pick -= w;
+            if (pick <= 0)
+            {
+                string id = c.Id;
+                float dur = (float)c.Duration + 1.5f;
+                CPH.LogInfo($"SO - Weighted pick id={id} dur={dur:0.##}s views={c.ViewCount} weight={w:0.##}");
+                return (id, dur);
+            }
+        }
+
+        var last = scored[scored.Count - 1];
+        {
+            string id = last.c.Id;
+            float dur = (float)last.c.Duration + 1.5f;
+            CPH.LogInfo($"SO - Weighted pick (fallback last) id={id} dur={dur:0.##}s views={last.c.ViewCount} weight={last.w:0.##}");
+            return (id, dur);
+        }
+    }
+
     // Randomly pick a clip ≤ 30s from the last 'days' days (uniform via reservoir sampling)
     private (string slug, float duration) PickRandomClipSlug(string username, int days)
     {
