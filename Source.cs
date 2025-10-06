@@ -9,6 +9,8 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Twitch.Common.Models.Api;
 using System.Linq;
+using Streamer.bot.Common;
+using Streamer.bot.Plugin;
 
 public class CPHInline
 {
