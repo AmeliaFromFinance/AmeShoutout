@@ -75,10 +75,10 @@ You can customize shoutout templates with tokens.
 Go show @{STREAMER} some love, {LIVE_STATUS:lower} {GAME:title|something awesome}!
 ```
 Will output the following if 'AmeliaFromFinance' is currently live:  
-> Go show @AmeliaFromFinance some love, she is currently streaming Software And Game Development!
+> Go show @AmeliaFromFinance some love, she is currently streaming Software and Game Development!
 
 Or, will output the following if 'AmeliaFromFinance' is not live:  
-> Go show @AmeliaFromFinance some love, she was last streaming Software And Game Development!
+> Go show @AmeliaFromFinance some love, she was last streaming Software and Game Development!
 
 ---
 
