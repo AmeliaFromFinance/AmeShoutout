@@ -1,6 +1,6 @@
 # Twitch Shoutout with Random Clips for Streamer.bot
 
-This action from Streamer.bot makes your shoutouts more engaging by pulling a random clip from the streamer you're shouting out and playing it directly in OBS — alone with a customizable chat message.
+This action from Streamer.bot makes your shoutouts more engaging by pulling a random clip from the streamer you're shouting out and playing it directly in OBS — along with a customizable chat message.
 
 It also integrates Twitch's native `/shoutout` feature, automatically respecting Twitch's cooldowns and limits.
 
