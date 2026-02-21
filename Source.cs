@@ -21,15 +21,17 @@ public class CPHInline
     private static readonly object soLock = new(), twitchLock = new();
     private static DateTime LastTwitchShout = DateTime.MinValue;
     
-    private const string LIVE_HASH = "639d5f11bfb8bf3053b424d9ef650d04c4ebb7d94711d644afb08fe9a0fad5d9";
-    private const string CLIP_HASH = "9aa558e066a22227c5ef2c0a8fded3aaa57d35181ad15f63df25bff516253a90";
-    private const string ACC_HASH = "4195bb9b63a5de46109db204e154d6c20101dc4f4774e968de1755dfb02a80ed";
-    private const string CID = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+    private static string LIVE_HASH = "639d5f11bfb8bf3053b424d9ef650d04c4ebb7d94711d644afb08fe9a0fad5d9";
+    private static string CLIP_HASH = "9aa558e066a22227c5ef2c0a8fded3aaa57d35181ad15f63df25bff516253a90";
+    private static string ACC_HASH = "4195bb9b63a5de46109db204e154d6c20101dc4f4774e968de1755dfb02a80ed";
+    private static string CID = "kimne78kx3ncx6brgo4mv6wki5h1ko";
     private static readonly Regex TokenRe = new(@"\{(\w+)(?::(\w+))?\}", RegexOptions.Compiled);
     private static readonly Regex SlugRe = new(@"^[A-Za-z0-9-]{10,100}$", RegexOptions.Compiled);
 
     public bool Execute()
     {
+        UpdateHashesAsync().GetAwaiter().GetResult();
+
         string scene = Arg<string>("sceneName") ?? "";
         string source = Arg<string>("sourceName") ?? "";
         string textSource = Arg<string>("gdiTextSourceName") ?? "none";
@@ -72,8 +74,6 @@ public class CPHInline
         
         string message = Render(CPH.GetTwitchUserVar<string>(targetUser, "shoutoutTemplate") is string userTemplate && userTemplate.Length > 0 ? userTemplate : Arg<string>("defaultTemplate") ?? "Go show @{STREAMER} some love!", tokens);
 
-        if ((type == "both" || type == "twitch") && !DoTwitchShout(targetUser, chatBot) && type == "twitch") return true;
-
         if (sourceType == "TwitchRaid" && raidCount) {
             int count = CPH.GetTwitchUserVar<int>(targetUser, "raidCount") + 1;
             CPH.SetTwitchUserVar(targetUser, "raidCount", count);
@@ -81,6 +81,8 @@ public class CPHInline
         }
 
         if (!string.IsNullOrWhiteSpace(message) && (type == "both" || type == "message")) Send(message, chatBot);
+
+        if ((type == "both" || type == "twitch") && !DoTwitchShout(targetUser, chatBot) && type == "twitch") return true;
 
         if (input1?.Equals("no", StringComparison.OrdinalIgnoreCase) == true || !clips) return true;
 
@@ -114,6 +116,38 @@ public class CPHInline
             CPH.ObsSetMediaSourceFile(scene, source, "");
         }
         return true;
+    }
+
+    private async Task UpdateHashesAsync()
+    {
+        try
+        {
+            string rawUrl = "https://raw.githubusercontent.com/AmeliaFromFinance/AmeShoutout/main/hash.json";
+            using HttpResponseMessage response = await Http.GetAsync(rawUrl);
+
+            if (response.IsSuccessStatusCode)
+            {
+                string json = await response.Content.ReadAsStringAsync();
+                JObject data = JObject.Parse(json);
+
+                string ? acc = data["ACC_HASH"]?.ToString();
+                string ? clip = data["CLIP_HASH"]?.ToString();
+                string ? live = data["LIVE_HASH"]?.ToString();
+                string ? cid = data["CLIENT_ID"]?.ToString();
+
+                bool updated = false;
+
+                if (!string.IsNullOrEmpty(acc) && ACC_HASH != acc) { ACC_HASH = acc!; updated = true; }
+                if (!string.IsNullOrEmpty(clip) && CLIP_HASH != clip) { CLIP_HASH = clip!; updated = true; }
+                if (!string.IsNullOrEmpty(live) && LIVE_HASH != live) { LIVE_HASH = live!; updated = true; }
+                if (!string.IsNullOrEmpty(cid) && CID != cid) { CID = cid!; updated = true; }
+
+                if (updated) CPH.LogInfo("[Ame-Shoutout] Updated hashes from github successfully.");
+            }
+        } catch (Exception ex)
+        {
+            CPH.LogWarn($"[Ame-Shoutout] Failed to fetch latest hashes from GitHub: {ex.Message}");
+        }
     }
 
     private (string? slug, float dur, string status) PickClip(string user, int days, float maxLength, bool weighted)
@@ -188,7 +222,6 @@ public class CPHInline
             request.Headers.TryAddWithoutValidation("Client-ID", CID);
             request.Content = new StringContent(JsonConvert.SerializeObject(new { operationName = operation, variables, extensions = new { persistedQuery = new { version = 1, sha256Hash = hash } } }), Encoding.UTF8, "application/json");
             using HttpResponseMessage response = await Http.SendAsync(request);
-            
             if (!response.IsSuccessStatusCode) return null;
             string json = await response.Content.ReadAsStringAsync();
             JToken token = JToken.Parse(json);
