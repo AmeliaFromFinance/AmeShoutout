@@ -23,7 +23,7 @@ public class CPHInline
     
     private static string LIVE_HASH = "639d5f11bfb8bf3053b424d9ef650d04c4ebb7d94711d644afb08fe9a0fad5d9";
     private static string CLIP_HASH = "9aa558e066a22227c5ef2c0a8fded3aaa57d35181ad15f63df25bff516253a90";
-    private static string ACC_HASH = "4195bb9b63a5de46109db204e154d6c20101dc4f4774e968de1755dfb02a80ed";
+    private static string ACC_HASH = "4f35f1ac933d76b1da008c806cd5546a7534dfaff83e033a422a81f24e5991b3";
     private static string CID = "kimne78kx3ncx6brgo4mv6wki5h1ko";
     private static readonly Regex TokenRe = new(@"\{(\w+)(?::(\w+))?\}", RegexOptions.Compiled);
     private static readonly Regex SlugRe = new(@"^[A-Za-z0-9-]{10,100}$", RegexOptions.Compiled);
