@@ -77,7 +77,7 @@ public class CPHInline
         if (sourceType == "TwitchRaid" && raidCount) {
             int count = CPH.GetTwitchUserVar<int>(targetUser, "raidCount") + 1;
             CPH.SetTwitchUserVar(targetUser, "raidCount", count);
-            message += $" ({(pSubject == "they" ? "They have" : $"{pSubject} has")} raided {count} time{(count == 1 ? "" : "s")}!)";
+            message += $" ({(pSubjectLower == "they" ? "They have" : $"{pSubject} has")} raided {count} time{(count == 1 ? "" : "s")}!)";
         }
 
         if (!string.IsNullOrWhiteSpace(message) && (type == "both" || type == "message")) Send(message, chatBot);
@@ -94,7 +94,7 @@ public class CPHInline
             duration = Math.Min(Math.Max(0, dur) + 1f, length);
         } else {
              (string? slug, float dur, string status) pick = PickClip(targetUser, days, length, popular);
-             if (pick.slug == null) return pick.status == "none" ? Log($"No clips for '{targetUser}'") : true;
+             if (pick.slug == null) return pick.status != "none" || Log($"No clips for '{targetUser}'");
              slug = pick.slug; duration = pick.dur;
         }
 
