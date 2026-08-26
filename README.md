@@ -12,6 +12,8 @@ Instead of only typing a message in chat, your community will actually see and h
 ## Features
 
 - Shoutouts can be triggered manually, automatically, or on raid.
+- If enabled via setting `enableTeamShoutouts`, members of the same stream team will be shouted out on their first message of the stream — even if they aren't in the `Auto Shoutout` group.
+- If enabled via setting `showSharedTeams`, shoutout messages will mention which stream team(s) you share with the person being shouted out — only if `shoutoutType` is set to `message` or `both`.
 - Plays a random clip from the target streamer (30 seconds or less).
 - Weighted random (by view count) is available via `PreferPopular = true`.
 - Can disable clip playback entirely via `DisplayClips = false`.
@@ -33,6 +35,26 @@ This action also uses Twitch’s built-in `/shoutout` system.
 
 ---
 
+## Stream Team Behavior
+
+When someone sends their **first message of the stream**, they will receive an automatic shoutout if **either** of the following is true:
+
+- They are in the `Auto Shoutout` group on Streamer.bot, **or**
+- `enableTeamShoutouts` is `true` **and** they share at least one stream team with you.
+
+If neither applies, no automatic shoutout is given.
+
+Additionally, when `showSharedTeams` is `true`, any shoutout (manual, automatic, raid) for someone who shares a stream team with you will have a line appended to the message, for example:
+
+> Go show @Amelia some love, she was last streaming Valorant! **She is in the team Twitch Creator Club - VTubers with me!**
+
+Singular/plural and pronouns are handled automatically (e.g. "*They are in the teams X and Y with me!*").
+
+> [!NOTE]
+> Your own team memberships are cached for **1 hour** to avoid unnecessary API calls. If you join or leave a stream team mid-stream, it can take up to an hour (or a Streamer.bot restart) for the change to be picked up.
+
+---
+
 ## Quick Setup
 
 ### Streamer.bot setup
@@ -41,7 +63,7 @@ This action also uses Twitch’s built-in `/shoutout` system.
 2. In **Streamer.bot**, click **Import**, paste, and confirm.  
 3. Go to **Commands**, find **[Ame] Shoutout**, right-click the group and click **Enable All**
 4. Go to **Settings** → **Groups**, type `Auto Shoutout` in the **Add Group** box and then click **Add**.
-4. Open **Actions → [Ame] Shoutout → Shoutout → Configuration** and configure the following:
+5. Open **Actions → [Ame] Shoutout → Shoutout → Configuration** and configure the following:
 
 | Variable | Description |
 |-----------|-------------|
@@ -49,6 +71,8 @@ This action also uses Twitch’s built-in `/shoutout` system.
 | **DisplayClips** | `True` to display clips on streamer, otherwise `False` - Default: `True` |
 | **PreferPopular** | `True` to prefer clips with higher view counts, otherwise `False` - Default: `False` |
 | **ShowRaidCount** | `True` to state how many times the user has raided your channel, otherwise `False` - Default: `True` |
+| **EnableTeamShoutouts** | `True` to automatically shoutout members of your stream team(s) on their first message, otherwise `False` - Default: `True` |
+| **ShowSharedTeams** | `True` to append the stream team(s) you share with the user to the shoutout message, otherwise `False` - Default: `True` |
 | **ShoutoutType** | Set to your desired option to control the behaviour, read the note below - Options: `message`, `twitch`, `both` |
 | **DefaultTemplate** | The default message template that will be used when giving a shoutout, which will be used if the user doesn't have a custom message set. - Read the **Tokens** section below to see what values can be used in the message |
 | **ClipDays** | Control how recent clips will be by setting a max days to retrieve clips from - Default: `30` |
@@ -66,6 +90,14 @@ This action also uses Twitch’s built-in `/shoutout` system.
 > If you want text to display above the clip then go into OBS to the `AmeShoutout` scene and add a `Text (GDI+)` source, positioning it wherever you want it to display, and then going back to streamer.bot to the `[Ame] Shoutout` -> `Shoutout` action, then expand the `OBS Settings` group and change `gdiTextSourceName` to whatever you named the `Text (GDI+)` source, and `textTemplate` to whatever you want the text to say.
 >
 > If you don't have the `AmeShoutout` scene then make sure OBS is open, go to the `[Ame] Shoutout` -> `Shoutout` action on SB, right click the `Test` trigger and click `Test Trigger`. This will create the scene and source for displaying clips.
+
+> [!NOTE]
+> The script automatically creates and maintains two **persisted global variables** on Streamer.bot:
+> 
+> - `ameShoutoutHashes` - a JSON string containing the GQL persisted-query hashes, fetched from GitHub and refreshed hourly.
+> - `ameShoutoutClientId` - the client ID used for GQL requests.
+>
+> You don't need to touch these. Deleting them simply forces a fresh fetch on the next shoutout.
 
 ---
 
@@ -88,9 +120,9 @@ This action also uses Twitch’s built-in `/shoutout` system.
 | **{GAME}** | The game that the streamer was last playing |
 | **{URL}** | The URL to their stream. |
 | **{LIVE_STATUS}** | Read the first note below
-| **SUBJECT** | The subject pronoun (They, He, She, Fae, etc...) - Defaults to **they** if no pronoun is set.
-| **OBJECT** | The object pronoun (Them, Him, Her, Faer, etc...) - Defaults to **them** if no pronoun is set.
-| **VERB** | Read the second note below |
+| **{SUBJECT}** | The subject pronoun (They, He, She, Fae, etc...) - Defaults to **they** if no pronoun is set.
+| **{OBJECT}** | The object pronoun (Them, Him, Her, Faer, etc...) - Defaults to **them** if no pronoun is set.
+| **{VERB}** | Read the second note below |
 
 > [!NOTE]
 > **{LIVE_STATUS}**
