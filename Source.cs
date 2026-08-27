@@ -51,31 +51,35 @@ public class CPHInline
         public string? User, Input0, Input1, Raw, SourceType, DefaultTemplate, TextTemplate;
         public int ClipDays = 60;
         public float ClipLength = 30f;
-        public bool PreferPopular, DisplayClips = true, UseChatBot, ShowRaidCount = true, ShowSharedTeams = true, TeamsEnabled = true;
+        public bool PreferPopular, DisplayClips = true, UseChatBot, ShowRaidCount = true, ShowSharedTeams = true, TeamsEnabled = true, OtherMessages = true;
         public string TargetLogin => (SourceType == "CommandTriggered" ? Input0 : User) ?? "";
     }
 
     private Config ReadConfig() => new()
     {
-        Scene           = Arg<string>("sceneName") ?? "",
-        Source          = Arg<string>("sourceName") ?? "",
-        TextSource      = Arg<string>("gdiTextSourceName") ?? "none",
-        Type            = Arg<string>("shoutoutType")?.ToLowerInvariant() ?? "message",
+        // Globals
+        Scene           = Global<string>("ameSceneName") ?? "",
+        Source          = Global<string>("ameSourceName") ?? "",
+        TextSource      = Global<string>("ameTextSourceName") ?? "none",
+        Type            = Global<string>("ameShoutoutType")?.ToLowerInvariant() ?? "message",
+        DefaultTemplate = Global<string>("ameDefaultTemplate"),
+        TextTemplate    = Global<string>("ameTextTemplate"),
+        ClipDays        = Global<int?>("ameClipDays") ?? 30,
+        ClipLength      = Global<float?>("ameClipLength") ?? 30f,
+        PreferPopular   = Global<bool?>("amePreferPopular") ?? false,
+        DisplayClips    = Global<bool?>("ameDisplayClips") ?? true,
+        UseChatBot      = Global<bool?>("ameChatBot") ?? false,
+        ShowRaidCount   = Global<bool?>("ameRaidCount") ?? true,
+        ShowSharedTeams = Global<bool?>("ameSharedTeams") ?? true,
+        TeamsEnabled    = Global<bool?>("ameTeamShoutouts") ?? true,
+        OtherMessages   = Global<bool?>("ameOtherMessages") ?? false,
+
+        // Arguments
         User            = Arg<string>("user"),
         Input0          = Arg<string>("input0"),
         Input1          = Arg<string>("input1"),
         Raw             = Arg<string>("rawInput"),
         SourceType      = Arg<string>("__source"),
-        DefaultTemplate = Arg<string>("defaultTemplate"),
-        TextTemplate    = Arg<string>("textTemplate"),
-        ClipDays        = Arg<int?>("clipDays") ?? 60,
-        ClipLength      = Arg<float?>("clipLength") ?? 30f,
-        PreferPopular   = Arg<bool?>("preferPopular") ?? false,
-        DisplayClips    = Arg<bool?>("displayClips") ?? true,
-        UseChatBot      = Arg<bool?>("useChatBot") ?? false,
-        ShowRaidCount   = Arg<bool?>("showRaidCount") ?? true,
-        ShowSharedTeams = Arg<bool?>("showSharedTeams") ?? true,
-        TeamsEnabled    = Arg<bool?>("enableTeamShoutouts") ?? true,
     };
 
     private sealed class Pronouns
@@ -513,10 +517,15 @@ public class CPHInline
 
     private bool Fail(Config cfg, string message)
     {
-        if (Arg<bool?>("otherMessages") ?? true) SendChat(message, cfg.UseChatBot);
+        if (cfg.OtherMessages) SendChat(message, cfg.UseChatBot);
         CPH.LogError($"{LogPrefix} {message}");
         return false;
     }
 
     private T Arg<T>(string key) { CPH.TryGetArg(key, out T value); return value; }
+    private T? Global<T>(string key)
+    {
+        try { return CPH.GetGlobalVar<T>(key); }
+        catch { return default; }
+    }
 }

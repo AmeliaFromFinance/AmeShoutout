@@ -12,11 +12,11 @@ Instead of only typing a message in chat, your community will actually see and h
 ## Features
 
 - Shoutouts can be triggered manually, automatically, or on raid.
-- If enabled via setting `enableTeamShoutouts`, members of the same stream team will be shouted out on their first message of the stream — even if they aren't in the `Auto Shoutout` group.
-- If enabled via setting `showSharedTeams`, shoutout messages will mention which stream team(s) you share with the person being shouted out — only if `shoutoutType` is set to `message` or `both`.
+- If enabled via setting `Team Shoutouts`, members of the same stream team will be shouted out on their first message of the stream — even if they aren't in the `Auto Shoutout` group.
+- If enabled via setting `Shared Teams`, shoutout messages will mention which stream team(s) you share with the person being shouted out — only if `Shoutout Type` is set to `message` or `both`.
 - Plays a random clip from the target streamer (30 seconds or less).
-- Weighted random (by view count) is available via `PreferPopular = true`.
-- Can disable clip playback entirely via `DisplayClips = false`.
+- Weighted random (by view count) is available via `Prefer Popular` setting.
+- Can disable clip playback entirely via `Display Clips` setting.
 - Integrates Twitch’s native `/shoutout` with built-in cooldown handling.
 - Fully customizable per-user shoutout messages.
 - Pronoun support via [pr.alejo.io](https://pr.alejo.io/)
@@ -29,8 +29,8 @@ This action also uses Twitch’s built-in `/shoutout` system.
 
 - Twitch allows one `/shoutout` per **2 minutes** across the channel.
 - Each user can only be shouted out once per **hour**.
-- If `ShoutoutType = "twitch"`, the script will announce in chat when it’s waiting for the cooldown (e.g., “I will shoutout @Name in 34.5s…”).
-- If `ShoutoutType = "both"`, it sends both the Twitch /shoutout and your formatted chat message.
+- If `Shoutout Type` is set to `twitch`, the script will announce in chat when it’s waiting for the cooldown (e.g., “I will shoutout @Name in 34.5s…”).
+- If `Shoutout Type` is set to `both`, it sends both the Twitch /shoutout and your formatted chat message.
 - If the `/shoutout` fails (e.g., per-user hourly limit hit), a failure message is displayed in chat.
 
 ---
@@ -40,11 +40,11 @@ This action also uses Twitch’s built-in `/shoutout` system.
 When someone sends their **first message of the stream**, they will receive an automatic shoutout if **either** of the following is true:
 
 - They are in the `Auto Shoutout` group on Streamer.bot, **or**
-- `enableTeamShoutouts` is `true` **and** they share at least one stream team with you.
+- `Team Shoutouts` is `checked` in settings **and** they share at least one stream team with you.
 
 If neither applies, no automatic shoutout is given.
 
-Additionally, when `showSharedTeams` is `true`, any shoutout (manual, automatic, raid) for someone who shares a stream team with you will have a line appended to the message, for example:
+Additionally, when `Shared Teams` is `checked` in settings, any shoutout (manual, automatic, raid) for someone who shares a stream team with you will have a line appended to the message, for example:
 
 > Go show @Amelia some love, she was last streaming Valorant! **She is in the team Twitch Creator Club - VTubers with me!**
 
@@ -59,37 +59,41 @@ Singular/plural and pronouns are handled automatically (e.g. "*They are in the t
 
 ### Streamer.bot setup
 
-1. Copy everything from `ImportString.txt`.  
-2. In **Streamer.bot**, click **Import**, paste, and confirm.  
+1. Copy everything from `ImportString.txt`.
+2. In **Streamer.bot**, click **Import**, paste, and confirm.
 3. Go to **Commands**, find **[Ame] Shoutout**, right-click the group and click **Enable All**
 4. Go to **Settings** → **Groups**, type `Auto Shoutout` in the **Add Group** box and then click **Add**.
-5. Open **Actions → [Ame] Shoutout → Shoutout → Configuration** and configure the following:
+5. Open **Actions → [Ame] Shoutout → Configuration**, right-click the `Test` trigger and then click `Test Trigger`, this will open the settings page so you configure the following:
 
 | Variable | Description |
 |-----------|-------------|
-| **UseChatBot** | `True` if you use my chat bot code, otherwise `False` - Default: `False`|
-| **DisplayClips** | `True` to display clips on streamer, otherwise `False` - Default: `True` |
-| **PreferPopular** | `True` to prefer clips with higher view counts, otherwise `False` - Default: `False` |
-| **ShowRaidCount** | `True` to state how many times the user has raided your channel, otherwise `False` - Default: `True` |
-| **EnableTeamShoutouts** | `True` to automatically shoutout members of your stream team(s) on their first message, otherwise `False` - Default: `True` |
-| **ShowSharedTeams** | `True` to append the stream team(s) you share with the user to the shoutout message, otherwise `False` - Default: `True` |
-| **ShoutoutType** | Set to your desired option to control the behaviour, read the note below - Options: `message`, `twitch`, `both` |
-| **DefaultTemplate** | The default message template that will be used when giving a shoutout, which will be used if the user doesn't have a custom message set. - Read the **Tokens** section below to see what values can be used in the message |
-| **ClipDays** | Control how recent clips will be by setting a max days to retrieve clips from - Default: `30` |
-| **ClipLength** | Control how long clips can be, in seconds - Default: `30` |
-| **OtherMessages** | `True` if you wish error messages to be sent in chat, otherwise `False` - Default `True` |
+| **Scene Name** | The name of the scene you want to create on OBS to display the clips - Default: `AmeShoutout`|
+| **Source Name** | The name of the media source that clips will use to play - Default: `ClipsDisplay`|
+| **Text Source Name** | The name of the text source for text to be displayed above the clip - Default: `none`|
+| **Text Template** | The default template that will display if the text source is set - Default: `Go show {STREAMER} some love!`|
+| **Chat Bot** | `Checked` if you use my chat bot code, otherwise `Unchecked` - Default: `Unchecked`|
+| **Display Clips** | `Checked` to display clips on streamer, otherwise `Unchecked` - Default: `Checked` |
+| **Prefer Popular** | `Checked` to prefer clips with higher view counts, otherwise `Unchecked` - Default: `Unchecked` |
+| **Raid Count** | `Checked` to state how many times the user has raided your channel, otherwise `Unchecked` - Default: `Checked` |
+| **Team Shoutouts** | `Checked` to automatically shoutout members of your stream team(s) on their first message, otherwise `Unchecked` - Default: `Checked` |
+| **Shared Teams** | `Checked` to append the stream team(s) you share with the user to the shoutout message, otherwise `Unchecked` - Default: `Checked` |
+| **Shoutout Type** | Set to your desired option to control the behaviour, read the note below - Options: `message`, `twitch`, `both` |
+| **Default Template** | The default message template that will be used when giving a shoutout, which will be used if the user doesn't have a custom message set. - Read the **Tokens** section below to see what values can be used in the message |
+| **Clip Days** | Control how recent clips will be by setting a max days to retrieve clips from - Default: `30` |
+| **Clip Length** | Control how long clips can be, in seconds - Default: `30` |
+| **Other Messages** | `Checked` if you wish error messages to be sent in chat, otherwise `Unchecked` - Default `Unchecked` |
 
 > [!NOTE]
-> `ShoutoutType` when set to `message` will send a shoutout message in the Twitch chat.
+> `Shoutout Type` when set to `message` will send a shoutout message in the Twitch chat.
 > 
 > When set to `twitch` will send a shoutout using the Twitch integrated `/shoutout` command, which can only be used once every 2 minutes, or hourly for the same user.
 >
 > When set to `both` will send a chat message and use the `/shoutout` command to give a shoutout.
 
 > [!NOTE]
-> If you want text to display above the clip then go into OBS to the `AmeShoutout` scene and add a `Text (GDI+)` source, positioning it wherever you want it to display, and then going back to streamer.bot to the `[Ame] Shoutout` -> `Shoutout` action, then expand the `OBS Settings` group and change `gdiTextSourceName` to whatever you named the `Text (GDI+)` source, and `textTemplate` to whatever you want the text to say.
+> If you want text to display above the clip then go into OBS to the `AmeShoutout` (or whatever scene name you set in settings) scene and add a `Text (GDI+)` source, positioning it wherever you want it to display, and then going back to streamer.bot to the `[Ame] Shoutout` -> `Configuration` action, then right-click the `Test` trigger and click `Test Trigger` which will open the settings. Change `Text Source Name` to whatever you named the `Text (GDI+)` source, and `Text Template` to whatever you want the text to say.
 >
-> If you don't have the `AmeShoutout` scene then make sure OBS is open, go to the `[Ame] Shoutout` -> `Shoutout` action on SB, right click the `Test` trigger and click `Test Trigger`. This will create the scene and source for displaying clips.
+> If you don't have the `AmeShoutout` (or whatever you set) scene then make sure OBS is open, go to the `[Ame] Shoutout` -> `Shoutout` action on SB, right click the `Test` trigger and click `Test Trigger`. This will create the scene and source for displaying clips.
 
 > [!NOTE]
 > The script automatically creates and maintains two **persisted global variables** on Streamer.bot:
