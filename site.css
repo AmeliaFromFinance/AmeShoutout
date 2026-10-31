@@ -691,3 +691,44 @@ dialog.viewer img {
     columns: 1;
   }
 }
+
+/* Bigger screens get everything scaled up, not just more empty space. */
+@media (min-width: 1680px) {
+  html {
+    --z: 1.12;
+    zoom: 1.12;
+  }
+}
+@media (min-width: 1920px) {
+  html {
+    --z: 1.22;
+    zoom: 1.22;
+  }
+}
+@media (min-width: 2240px) {
+  html {
+    --z: 1.32;
+    zoom: 1.32;
+  }
+}
+@media (min-width: 2500px) {
+  html {
+    --z: 1.42;
+    zoom: 1.42;
+  }
+}
+@media (min-width: 3200px) {
+  html {
+    --z: 1.8;
+    zoom: 1.8;
+  }
+}
+
+/* Window-sized limits have to undo the zoom, or the viewer overflows. */
+dialog.viewer {
+  max-width: calc(92vw / var(--z, 1));
+  max-height: calc(92vh / var(--z, 1));
+}
+dialog.viewer img {
+  max-height: calc(90vh / var(--z, 1));
+}
