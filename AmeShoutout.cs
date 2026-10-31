@@ -20,7 +20,7 @@ public class CPHInline
     private const string Name = "AmeShoutout";
     private const string Version = "4.0.0";
     private const string LogPrefix = "[AmeShoutout]";
-    private const string Website = "https://ameliafromfinance.github.io/AmeShoutout/";
+    private const string Website = "https://shoutout.sinist3r.lol/";
     private const string AutoGroup = "Auto Shoutout";
     private const string TemplateVar = "shoutoutTemplate";
     private const string RaidCountVar = "raidCount";
