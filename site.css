@@ -732,3 +732,40 @@ dialog.viewer {
 dialog.viewer img {
   max-height: calc(90vh / var(--z, 1));
 }
+
+/* OrchidUI host picker in the setup steps */
+.hosts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px;
+  margin: 12px 0 10px;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--line);
+  font-size: 14px;
+}
+.hosts > * {
+  padding: 8px 12px;
+  background: var(--card);
+}
+.hosts a {
+  font: 500 13px var(--mono);
+  white-space: nowrap;
+}
+.hint {
+  display: block;
+  color: var(--faint);
+  font-size: 13.5px;
+}
+.hint code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .hosts {
+    grid-template-columns: 1fr;
+  }
+  .hosts span {
+    padding-bottom: 0;
+  }
+}
