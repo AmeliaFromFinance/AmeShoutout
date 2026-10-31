@@ -41,6 +41,7 @@ public class CPHInline
     private static readonly TimeSpan TwitchCooldown = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan TwitchUserCooldown = TimeSpan.FromHours(1);
     private static readonly TimeSpan RepeatGuard = TimeSpan.FromHours(1);
+    private static readonly TimeSpan RaidOverlap = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan TeamCacheTtl = TimeSpan.FromHours(1);
     private static readonly TimeSpan HashRefresh = TimeSpan.FromHours(1);
     private static readonly TimeSpan HashRetry = TimeSpan.FromMinutes(5);
@@ -128,7 +129,7 @@ public class CPHInline
             switch (source)
             {
                 case "CommandTriggered": return RunCommand(LoadConfig(), a);
-                case "TwitchRaid": return Shoutout(LoadConfig(), Arg(a, "userName") ?? Arg(a, "user"), Reason.Raid, null, null, false, Arg(a, "user"));
+                case "TwitchRaid": return Raid(LoadConfig(), a);
                 case "TwitchFirstWord": return FirstWords(LoadConfig(), a);
                 default: return OpenSettings();
             }
@@ -357,7 +358,17 @@ public class CPHInline
 
         bool listed = CPH.UserInGroup(login, Platform.Twitch, AutoGroup);
         if (!listed && !(cfg.TeamShoutouts && SharedTeams(login).Count > 0)) return true;
+        // Claimed in one step, so a raid landing at the same moment can't double it.
+        if (!Claim(login, RepeatGuard)) return true;
         return Shoutout(cfg, login, Reason.FirstWords, null, null, false, Arg(a, "user"));
+    }
+
+    private bool Raid(Config cfg, Dictionary<string, object> a)
+    {
+        string login = CleanLogin(Arg(a, "userName") ?? Arg(a, "user"));
+        // Skipped only if their first message beat the raid by a few seconds.
+        if (!Claim(login, RaidOverlap)) return true;
+        return Shoutout(cfg, login, Reason.Raid, null, null, false, Arg(a, "user"));
     }
 
     private bool Shoutout(Config cfg, string login, Reason reason, string msgId, string clipArg, bool noClip, string giver)
@@ -428,6 +439,17 @@ public class CPHInline
             int count = CPH.GetTwitchUserVar<int>(login, RaidCountVar, true) + 1;
             CPH.SetTwitchUserVar(login, RaidCountVar, count, true);
             return count;
+        }
+    }
+
+    private static bool Claim(string login, TimeSpan window)
+    {
+        lock (StateLock)
+        {
+            DateTime at;
+            if (LastShoutout.TryGetValue(login, out at) && DateTime.UtcNow - at < window) return false;
+            LastShoutout[login] = DateTime.UtcNow;
+            return true;
         }
     }
 
